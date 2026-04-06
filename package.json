@@ -249,8 +249,8 @@
     "publish:vsce": "vsce publish",
     "publish:ovsx": "npx ovsx publish",
     "test:visual": "playwright test",
-    "test:visual:docker": "docker-compose run --rm playwright npx playwright test",
-    "test:visual:update": "docker-compose run --rm playwright npx playwright test --update-snapshots"
+    "test:visual:docker": "docker compose run --rm playwright npx playwright test",
+    "test:visual:update": "docker compose run --rm playwright npx playwright test --update-snapshots"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
