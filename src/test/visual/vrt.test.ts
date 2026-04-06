@@ -35,19 +35,20 @@ test.describe("Visual Regression Tests", () => {
       // Wait for Mermaid if present
       const mermaidCount = await page.locator(".mermaid").count();
       if (mermaidCount > 0) {
-        try {
-          // Wait for mermaid to initialize and draw SVG
-          await page.waitForSelector(".mermaid svg", { timeout: 5000 });
-        } catch (e) {
-          console.warn("Mermaid SVG not found within timeout, might be a render issue or no diagram in this case.");
-        }
+        // Wait for mermaid to initialize and draw SVG
+        await page.waitForSelector(".mermaid svg", { timeout: 30000 });
       }
 
-      // Wait for fonts/math
+      // Wait for KaTeX/fonts
+      // @ts-ignore
+      await page.evaluate(() => document.fonts.ready);
       const katexCount = await page.locator(".katex").count();
       if (katexCount > 0) {
         await page.waitForSelector(".katex", { state: "visible" });
       }
+      
+      // Additional settle time for external assets/animations
+      await page.waitForTimeout(2000);
 
       await expect(page).toHaveScreenshot(`${c.name}-split-light.png`, { fullPage: true });
     });
@@ -61,10 +62,12 @@ test.describe("Visual Regression Tests", () => {
       
       const mermaidCount = await page.locator(".mermaid").count();
       if (mermaidCount > 0) {
-        try {
-          await page.waitForSelector(".mermaid svg", { timeout: 5000 });
-        } catch (e) {}
+        await page.waitForSelector(".mermaid svg", { timeout: 30000 });
       }
+
+      // @ts-ignore
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(2000);
 
       await expect(page).toHaveScreenshot(`${c.name}-split-dark.png`, { fullPage: true });
     });
@@ -78,10 +81,12 @@ test.describe("Visual Regression Tests", () => {
       
       const mermaidCount = await page.locator(".mermaid").count();
       if (mermaidCount > 0) {
-        try {
-          await page.waitForSelector(".mermaid svg", { timeout: 5000 });
-        } catch (e) {}
+        await page.waitForSelector(".mermaid svg", { timeout: 30000 });
       }
+
+      // @ts-ignore
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(2000);
 
       await expect(page).toHaveScreenshot(`${c.name}-inline-light.png`, { fullPage: true });
     });

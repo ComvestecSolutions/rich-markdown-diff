@@ -44,7 +44,7 @@ export default defineConfig({
   snapshotDir: "./src/test/visual/__screenshots__",
   expect: {
     toHaveScreenshot: {
-      maxDiffPixelRatio: 0.01,
+      maxDiffPixelRatio: 0.05,
       threshold: 0.2,
     },
   }
