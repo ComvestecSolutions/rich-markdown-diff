@@ -247,10 +247,14 @@
     "test:unit": "npm run compile && mocha ./out/test/unit/**/*.test.js",
     "package": "vsce package",
     "publish:vsce": "vsce publish",
-    "publish:ovsx": "npx ovsx publish"
+    "publish:ovsx": "npx ovsx publish",
+    "test:visual": "playwright test",
+    "test:visual:docker": "docker-compose run --rm playwright npx playwright test",
+    "test:visual:update": "docker-compose run --rm playwright npx playwright test --update-snapshots"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.59.1",
     "@types/glob": "^9.0.0",
     "@types/markdown-it": "^14.1.2",
     "@types/mocha": "^10.0.10",
@@ -269,6 +273,7 @@
     "globals": "^17.3.0",
     "mocha": "^10.8.2",
     "ovsx": "^0.10.9",
+    "playwright": "^1.59.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0"
@@ -276,9 +281,11 @@
   "dependencies": {
     "@iktakahiro/markdown-it-katex": "^3.1.0",
     "@vscode/l10n": "^0.0.18",
+    "entities": "3.0.1",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
     "htmldiff-js": "^1.0.5",
+    "htmlparser2": "9.1.0",
     "markdown-it": "^14.1.0",
     "markdown-it-deflist": "^3.0.0",
     "markdown-it-emoji": "^3.0.0",
