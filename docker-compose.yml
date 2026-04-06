@@ -7,3 +7,4 @@ services:
     command: npx playwright test
     environment:
       - NODE_ENV=test
+    ipc: host

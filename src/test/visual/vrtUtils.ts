@@ -55,7 +55,7 @@ export async function generateVRTHtml(
   let html = provider.getWebviewContent(
     diffHtml,
     "data:text/css;base64," + Buffer.from(katexCss).toString("base64"),
-    "", // Mermaid handle separately
+    "mock-mermaid.min.js", // Used so regex matches to inject local script
     "data:text/css;base64," + Buffer.from(hljsCss).toString("base64"),
     "data:text/css;base64," + Buffer.from(hljsCss).toString("base64"),
     "Original",
@@ -67,66 +67,43 @@ export async function generateVRTHtml(
   // Inject Theme Variables
   html = html.replace(":root {", `:root { ${themeVars}`);
 
-  // Inject Layout Overrides for Full Page VRT
-  const layoutOverrides = `
-    <style>
-    /* Full Page VRT Fix: Force all containers to expand to content height */
-    html, body {
-        height: auto !important;
-        min-height: 100% !important;
-        overflow: visible !important;
-    }
-    body {
-        display: block !important;
-    }
-    .header {
-        display: flex !important;
-        height: 30px !important;
-        width: 100% !important;
-    }
-    .container {
-        display: flex !important;
-        flex-direction: row !important;
-        height: auto !important;
-        min-height: auto !important;
-        overflow: visible !important;
-        width: 100% !important;
-    }
-    .pane {
-        height: auto !important;
-        min-height: auto !important;
-        overflow: visible !important;
-        flex: 1 !important;
-        border-right: 1px solid var(--vscode-panel-border) !important;
-    }
-    body.inline-mode .container {
-        flex-direction: column !important;
-    }
-    body.inline-mode .pane {
-        border-right: none !important;
-    }
-    /* Hide toolbar for VRT to reduce noise */
-    .toolbar {
-        display: none !important;
-    }
-    </style>
-  `;
-
-  // Insert overrides at the end of <head>
-  html = html.replace("</head>", `${layoutOverrides}</head>`);
+  // Layout overrides removed because they cause infinite layout loops in headless Chromium.
+  // We simply use setViewportSize(1280, 4000) for screenshotting.
 
   // Remove CSP for testing environment
   html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, "");
 
-  // Inject Mermaid script locally
-  const mermaidJs = fs.readFileSync(path.join(mediaDir, "mermaid/mermaid.min.js"), "utf8");
-  html = html.replace(/<script[^>]*src="[^"]*mermaid.min.js"[^>]*><\/script>/, 
-    `<script>${mermaidJs}</script>`);
+  // We don't inject mermaid.min.js in VRT since it's mocked by CSS and executing it can cause hangs.
+  html = html.replace(/<script[^>]*src="[^"]*mock-mermaid.min.js"[^>]*><\/script>/, "");
 
   // Force inline mode if requested
   if (options.inline) {
     html = html.replace("<body", '<body class="inline-mode"');
   }
+
+  // Mock Mermaid for VRT. Headless browsers often fail to render Mermaid SVGs securely (sandbox errors),
+  // which causes flaky text-only snapshots or timeouts. We replace `.mermaid` with a static visual block.
+  html = html.replace("</head>", `
+    <style>
+      .mermaid {
+         background: var(--vscode-editor-inactiveSelectionBackground);
+         color: transparent !important;
+         overflow: hidden;
+         border: 1px dashed var(--vscode-panel-border);
+         min-height: 100px;
+         display: flex !important;
+         align-items: center;
+         justify-content: center;
+      }
+      .mermaid::after {
+         content: "Mermaid Diagram (Mocked for VRT)";
+         color: var(--vscode-descriptionForeground);
+         font-family: var(--vscode-font-family);
+         font-size: 12px;
+      }
+      .mermaid svg { display: none !important; }
+    </style>
+  </head>`);
 
   return html;
 }
