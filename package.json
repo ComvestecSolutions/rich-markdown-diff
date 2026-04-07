@@ -235,22 +235,26 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run esbuild-base -- --production",
+    "vscode:prepublish": "pnpm run esbuild-base -- --production",
     "esbuild-base": "node esbuild.js",
-    "esbuild": "npm run esbuild-base -- --sourcemap",
-    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
-    "compile": "tsc -p ./ && npm run esbuild",
-    "watch": "npm run esbuild-watch",
-    "pretest": "npm run compile && npm run lint",
+    "esbuild": "pnpm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "pnpm run esbuild-base -- --sourcemap --watch",
+    "compile": "tsc -p ./ && pnpm run esbuild",
+    "watch": "pnpm run esbuild-watch",
+    "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
     "test": "node ./out/test/runTest.js",
-    "test:unit": "npm run compile && mocha ./out/test/unit/**/*.test.js",
+    "test:unit": "pnpm run compile && mocha ./out/test/unit/**/*.test.js",
     "package": "vsce package",
     "publish:vsce": "vsce publish",
-    "publish:ovsx": "npx ovsx publish"
+    "publish:ovsx": "pnpm exec ovsx publish",
+    "test:visual": "pnpm exec playwright test",
+    "test:visual:docker": "docker compose run --rm playwright sh -c \"pnpm install --store-dir /pnpm-store && pnpm exec playwright test\"",
+    "test:visual:update": "docker compose run --rm playwright sh -c \"pnpm install --store-dir /pnpm-store && pnpm exec playwright test --update-snapshots\""
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.59.1",
     "@types/glob": "^9.0.0",
     "@types/markdown-it": "^14.1.2",
     "@types/mocha": "^10.0.10",
@@ -269,6 +273,7 @@
     "globals": "^17.3.0",
     "mocha": "^10.8.2",
     "ovsx": "^0.10.9",
+    "playwright": "^1.59.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0"
@@ -276,9 +281,11 @@
   "dependencies": {
     "@iktakahiro/markdown-it-katex": "^3.1.0",
     "@vscode/l10n": "^0.0.18",
+    "entities": "3.0.1",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
     "htmldiff-js": "^1.0.5",
+    "htmlparser2": "9.1.0",
     "markdown-it": "^14.1.0",
     "markdown-it-deflist": "^3.0.0",
     "markdown-it-emoji": "^3.0.0",
@@ -290,5 +297,13 @@
     "markdown-it-task-lists": "^2.1.1",
     "markdown-it-wikilinks": "^1.4.0",
     "sanitize-html": "^2.17.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@vscode/vsce-sign",
+      "esbuild",
+      "keytar",
+      "reurl"
+    ]
   }
 }

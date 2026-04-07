@@ -1,0 +1,17 @@
+services:
+  playwright:
+    build:
+      context: .
+      dockerfile: Dockerfile.vrt
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - pnpm-store:/pnpm-store
+    working_dir: /app
+    command: sh -c "pnpm install --store-dir /pnpm-store && pnpm exec playwright test"
+    environment:
+      - NODE_ENV=test
+    ipc: host
+
+volumes:
+  pnpm-store:
