@@ -27,6 +27,7 @@ out/*.js.map
 # Artifacts & Logs
 *.vsix
 *.log
+tmp-*
 
 # Assets
 # Exclude heavy GIFs (served from GitHub), keep other images (icon.png)
