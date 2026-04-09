@@ -91,14 +91,14 @@ Review teammates' changes in the **rendered output** rather than raw source, red
 
 ### Run the extension locally
 
-1. Install dependencies with `bun install`.
-2. Compile the extension with `bun run compile`.
+1. Install dependencies with `pnpm install`.
+2. Compile the extension with `pnpm run compile`.
 3. Press `F5` in VS Code to open an **Extension Development Host**.
 4. Use the commands from the Explorer, editor, or Source Control view in the development host.
 
 ### Build and install a local `.vsix`
 
-1. Create a package with `bun run package`.
+1. Create a package with `pnpm run package`.
 2. In VS Code, open the Extensions view, select the `...` menu, then choose **Install from VSIX...**.
 3. Pick the generated `.vsix` file from the repository root.
 4. Reload VS Code and smoke-test the SCM and clipboard flows before publishing.

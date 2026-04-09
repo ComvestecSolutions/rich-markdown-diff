@@ -13,7 +13,7 @@ All notable changes to **Rich Markdown Diff** will be documented in this file.
 - **Wikilinks Plugin**: Added a dedicated `[[wikilink]]` Markdown-it plugin for rendering wiki-style links in diffs.
 - **Command Target Resolution**: New `commandTarget.ts` module normalizes Explorer, editor, and SCM command payloads into a consistent comparison target.
 - **Git Diff Resolver**: New `gitDiffResolver.ts` module resolves Git-backed comparisons for working tree, staged, untracked, deleted, and HEAD-based Markdown diffs.
-- **Bun Package Manager**: Migrated build tooling to Bun for faster installs and builds.
+- **pnpm Package Manager**: Migrated build tooling to pnpm for faster installs and reliable cross-platform builds.
 
 ### Fixed in 1.2.0
 
