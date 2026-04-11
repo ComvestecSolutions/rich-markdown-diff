@@ -573,7 +573,7 @@ async function renderDiffPanel(
   await diffProvider.waitForReady();
 
   const resolver = createImageResolver(state.imageBaseUri, panel.webview);
-  const diffHtml = diffProvider.computeDiff(
+  const { html: diffHtml, marpCss } = diffProvider.computeDiff(
     originalContent,
     modifiedContent,
     resolver,
@@ -594,6 +594,7 @@ async function renderDiffPanel(
     state.rightLabel,
     panel.webview.cspSource,
     getWebviewTranslations(),
+    marpCss,
   );
 
   return contentKey;
@@ -951,7 +952,7 @@ export function activate(context: vscode.ExtensionContext) {
       );
 
       const resolver = createImageResolver(document.uri, panel.webview);
-      const diffHtml = diffProvider.computeDiff(
+      const { html: diffHtml, marpCss } = diffProvider.computeDiff(
         clipboardText,
         docText,
         resolver,
@@ -998,6 +999,7 @@ export function activate(context: vscode.ExtensionContext) {
         path.basename(document.fileName),
         panel.webview.cspSource,
         getWebviewTranslations(),
+        marpCss,
       );
 
       // Helper to track active panel for shortcuts

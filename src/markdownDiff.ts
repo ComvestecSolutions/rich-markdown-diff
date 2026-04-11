@@ -43,6 +43,7 @@ const hljs = require("highlight.js");
  */
 export class MarkdownDiffProvider {
   private md: MarkdownIt;
+  private marp: any; // Lazy-loaded Marp instance
 
   private readyPromise: Promise<void>;
 
@@ -172,6 +173,8 @@ export class MarkdownDiffProvider {
         // @ts-ignore
         import("markdown-it-deflist"),
         import("markdown-it-github-alerts"),
+        // @ts-ignore
+        import("@marp-team/marp-core"),
       ]);
 
       const [
@@ -182,6 +185,7 @@ export class MarkdownDiffProvider {
         emojiMod,
         deflistMod,
         githubAlertsMod,
+        marpMod,
       ] = plugins;
 
       const getPlugin = (mod: any) => mod.default || mod;
@@ -218,6 +222,15 @@ export class MarkdownDiffProvider {
       }
       if (typeof githubAlerts === "function") {
         this.md.use(githubAlerts);
+      }
+
+      if (marpMod) {
+        const MarpClass = marpMod.Marp || marpMod;
+        this.marp = new MarpClass({
+          container: false,
+          html: true,
+          inlineSVG: false,
+        });
       }
     } catch (e) {
       console.error("Failed to load markdown plugins:", e);
@@ -360,6 +373,10 @@ export class MarkdownDiffProvider {
           "data-end",
           "data-type",
           "data-original-content",
+          // Marp attributes
+          "data-marpit-pagination",
+          "data-marpit-pagination-total",
+          "data-theme",
           // MathML attributes
           "mathvariant",
           "encoding",
@@ -423,6 +440,10 @@ export class MarkdownDiffProvider {
           "text-align": [/.*/],
           color: [/.*/],
           "background-color": [/.*/],
+          // CSS Variables for Marp themes
+          "--theme": [/.*/],
+          "--color": [/.*/],
+          "--background": [/.*/],
         },
       },
       transformTags: {
@@ -477,26 +498,50 @@ export class MarkdownDiffProvider {
 
   /**
    * Computes the visual difference between two Markdown strings.
-   *
    * @param oldMarkdown - The original Markdown content.
    * @param newMarkdown - The modified Markdown content.
    * @param imageResolver - An optional function to resolve relative image paths.
-   * @returns A string containing the HTML representation of the differences.
+   * @returns An object containing the HTML representation of the differences and Marp CSS if applicable.
    */
   public computeDiff(
     oldMarkdown: string,
     newMarkdown: string,
     imageResolver?: (src: string) => string,
-  ): string {
+  ): { html: string; marpCss?: string } {
     const oldMatter = matter(oldMarkdown);
     const newMatter = matter(newMarkdown);
 
+    const isMarp = !!(oldMatter.data.marp || newMatter.data.marp);
+
     // 1. Render Body Diff
     const envOld = { imageResolver };
-    let oldHtml = this.md.render(oldMatter.content, envOld);
+    let oldHtml: string;
+    let newHtml: string;
+    let marpCss: string | undefined;
 
-    const envNew = { imageResolver };
-    let newHtml = this.md.render(newMatter.content, envNew);
+    if (isMarp && this.marp) {
+      const { html: oHtml, css: cssOld } = this.marp.render(oldMarkdown, envOld);
+      oldHtml = this.cleanMarpHtml(oHtml);
+
+      const envNew = { imageResolver };
+      const { html: nHtml, css: cssNew } = this.marp.render(newMarkdown, envNew);
+      newHtml = this.cleanMarpHtml(nHtml);
+
+      // Scope CSS to respective panes to allow different themes without conflict
+      const resOld = this.scopeMarpCss(cssOld, "#left-pane.marpit");
+      const resNew = this.scopeMarpCss(cssNew, "#right-pane.marpit");
+
+      marpCss = [
+        ...new Set([...resOld.charsets, ...resNew.charsets]),
+        ...new Set([...resOld.imports, ...resNew.imports]),
+        resOld.scoped,
+        resNew.scoped,
+      ].join("\n");
+    } else {
+      oldHtml = this.md.render(oldMatter.content, envOld);
+      const envNew = { imageResolver };
+      newHtml = this.md.render(newMatter.content, envNew);
+    }
 
     // Sanitize Rendered Markdown
     oldHtml = this.sanitizeHtml(oldHtml);
@@ -624,7 +669,7 @@ export class MarkdownDiffProvider {
         </div>`;
     }
 
-    return fmHtml + bodyDiffHtml;
+    return { html: fmHtml + bodyDiffHtml, marpCss };
   }
 
   /**
@@ -1525,6 +1570,45 @@ export class MarkdownDiffProvider {
   }
 
   /**
+   * Removes scripts and style tags injected by Marp Core that are not needed for diffing.
+   */
+  private cleanMarpHtml(html: string): string {
+    // Remove scripts
+    let cleaned = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+    // Remove styles (Marp Core injects these for polyfills/runtime)
+    cleaned = cleaned.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
+    return cleaned;
+  }
+
+  /**
+   * Scopes Marp CSS to a specific selector using CSS nesting.
+   * Extracts @import and @charset to ensure they remain valid at the top level.
+   */
+  private scopeMarpCss(
+    css: string,
+    scopeSelector: string,
+  ): { charsets: string[]; imports: string[]; scoped: string } {
+    const charsets: string[] = [];
+    const imports: string[] = [];
+
+    let cleanedCss = css.replace(/@charset\s+[^;]+;/g, (m) => {
+      charsets.push(m);
+      return "";
+    });
+
+    cleanedCss = cleanedCss.replace(/@import\s+[^;]+;/gi, (m) => {
+      imports.push(m);
+      return "";
+    });
+
+    return {
+      charsets,
+      imports,
+      scoped: `${scopeSelector} { ${cleanedCss} }`,
+    };
+  }
+
+  /**
    * Consolidates fragmented diff tags for block elements like tables.
    * If an entire block (e.g., table) consists only of deletions or only of insertions,
    * it wraps the entire block in <del> or <ins> and removes internal diff tags.
@@ -1543,6 +1627,8 @@ export class MarkdownDiffProvider {
       "h4",
       "h5",
       "h6",
+      "section",
+      "svg",
     ];
     let result = html;
 
@@ -1615,6 +1701,7 @@ export class MarkdownDiffProvider {
     rightLabel: string = "Modified",
     cspSource: string = "",
     translations: Record<string, string> = {},
+    marpCss: string = "",
   ): string {
     const nonce = crypto.randomBytes(16).toString("hex");
 
@@ -1647,6 +1734,8 @@ export class MarkdownDiffProvider {
     <link rel="stylesheet" href="${hljsDarkCssUri}" media="(prefers-color-scheme: dark)">
     <!-- Mermaid JS -->
     <script nonce="${nonce}" src="${mermaidJsUri}"></script>
+    <!-- Marp CSS -->
+    ${marpCss ? `<style nonce="${nonce}">${marpCss}</style>` : ""}
     <style nonce="${nonce}">
         :root { /* VRT_THEME_VARS */ }
         html, body {
@@ -2288,6 +2377,62 @@ export class MarkdownDiffProvider {
 
         /* Right Pane: Hide Old, Show New */
         body:not(.inline-mode) #right-pane .frontmatter-diff .fm-old { display: none; }
+        /* Marp Support */
+        .marp .marpit > svg,
+        .marp .marpit > section,
+        .marp section {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 9;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            margin-top: 0 !important;
+            margin-bottom: 20px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--vscode-panel-border);
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden !important;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        /* Ensure diff markers work inside slides */
+        .marp section ins {
+            background-color: rgba(34, 197, 94, 0.2) !important;
+            text-decoration: none;
+        }
+        .marp section del {
+            background-color: rgba(239, 68, 68, 0.2) !important;
+            text-decoration: line-through;
+        }
+
+        /* Adjustments for slides wrapped in blocks (to avoid double margins/borders) */
+        ins.diffins.diff-block:has(> .marpit),
+        del.diffdel.diff-block:has(> .marpit),
+        ins.diffins.diff-block:has(> svg),
+        del.diffdel.diff-block:has(> svg),
+        ins.diffins.diff-block:has(> section),
+        del.diffdel.diff-block:has(> section) {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            background-color: transparent !important;
+        }
+
+        /* If the whole slide is new/deleted, show the tint on the slide itself */
+        ins.diffins:has(> svg) svg,
+        ins.diffins:has(> section) section {
+            border-color: rgba(34, 197, 94, 0.6) !important;
+            background-color: rgba(34, 197, 94, 0.05) !important;
+        }
+        del.diffdel:has(> svg) svg,
+        del.diffdel:has(> section) section {
+            border-color: rgba(239, 68, 68, 0.6) !important;
+            background-color: rgba(239, 68, 68, 0.05) !important;
+        }
+
         /* Active Change Highlighting */
         /* Simplified to avoid heavy rendering */
         /* Active Change Highlighting */
@@ -2459,16 +2604,16 @@ export class MarkdownDiffProvider {
         <div class="header-item" title="${safeLeft}">${safeLeft}</div>
         <div class="header-item" title="${safeRight}">${safeRight}</div>
     </div>
-    <div class="container">
-        <div class="pane" id="left-pane">
-        <div class="pane-content" id="left-content">
-          ${diffHtml}
+    <div class="container ${marpCss ? "marp marpit" : ""}">
+        <div class="pane ${marpCss ? "marp marpit" : ""}" id="left-pane">
+            <div class="pane-content" id="left-content">
+                ${diffHtml}
+            </div>
         </div>
-        </div>
-        <div class="pane" id="right-pane">
-        <div class="pane-content" id="right-content">
-          ${diffHtml}
-        </div>
+        <div class="pane ${marpCss ? "marp marpit" : ""}" id="right-pane">
+            <div class="pane-content" id="right-content">
+                ${diffHtml}
+            </div>
         </div>
     </div>
     <script nonce="${nonce}">
