@@ -48,6 +48,10 @@ export default defineConfig({
       maxDiffPixelRatio: 0.1,
       threshold: 0.1,
     },
+    toMatchSnapshot: {
+      maxDiffPixelRatio: 0.1,
+      threshold: 0.1,
+    },
   },
   /* Standardize snapshot paths to match existing files including OS suffix */
   snapshotPathTemplate:
