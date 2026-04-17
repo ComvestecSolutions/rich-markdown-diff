@@ -25,16 +25,11 @@
 import MarkdownIt = require("markdown-it");
 // @ts-ignore
 import * as htmldiff from "htmldiff-js";
-const wikilinks = require("./wikilinksPlugin");
-// @ts-ignore
-const katex = require("@iktakahiro/markdown-it-katex");
-// @ts-ignore
-const taskLists = require("markdown-it-task-lists");
 import matter from "gray-matter";
-import hljs from "highlight.js";
-import { sanitizeHtml, escapeHtml } from "./markdown/sanitizer";
+import { sanitizeHtml } from "./markdown/sanitizer";
 import { getWebviewContent } from "./markdown/webviewTemplate";
-import { loadMarp, cleanMarpHtml, resolveCssUrls, scopeMarpCss } from "./markdown/marpRenderer";
+import { cleanMarpHtml, resolveCssUrls, scopeMarpCss } from "./markdown/marpRenderer";
+import { createMarkdownRenderer, loadMarkdownPlugins } from "./markdown/renderer";
 import {
   replaceComplexBlocksWithTokens,
   replaceCheckboxesWithTokens,
@@ -59,100 +54,8 @@ export class MarkdownDiffProvider {
    * Initializes the Markdown renderer and its plugins.
    */
   constructor() {
-    this.md = new MarkdownIt({
-      html: true,
-      linkify: true,
-      typographer: true,
-      highlight: function (str, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-          try {
-            return hljs.highlight(str, { language: lang, ignoreIllegals: true })
-              .value;
-          } catch {
-            /* ignore highlight errors and fallback */
-          }
-        }
-        return "";
-      },
-    });
-
-    // Plugin Configuration
-    // Wikilinks: default options
-    this.md.use(wikilinks, { uriSuffix: "" });
-
-    // Math: KaTeX
-    this.md.use(katex);
-
-    // Task Lists: Checkboxes
-    this.md.use(taskLists, { enabled: true });
-
-    // Dynamic Import for ESM Plugins
+    this.md = createMarkdownRenderer();
     this.readyPromise = this.loadPlugins();
-
-    // Mermaid Support: Custom fence renderer
-    const defaultFence =
-      this.md.renderer.rules.fence ||
-      function (tokens, idx, options, env, self) {
-        return self.renderToken(tokens, idx, options);
-      };
-
-    this.md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-      const token = tokens[idx];
-      const info = token.info
-        ? this.md.utils.unescapeAll(token.info).trim()
-        : "";
-
-      if (info === "mermaid") {
-        const escapedContent = escapeHtml(token.content);
-        return `<div class="mermaid" data-original-content="${escapedContent}">\n${escapedContent}\n</div>`;
-      }
-
-      return defaultFence(tokens, idx, options, env, self);
-    };
-
-    // Image Resolver Support
-    const defaultImage =
-      this.md.renderer.rules.image ||
-      function (tokens, idx, options, env, self) {
-        return self.renderToken(tokens, idx, options);
-      };
-
-    this.md.renderer.rules.image = (tokens, idx, options, env, self) => {
-      const token = tokens[idx];
-      const src = token.attrGet("src");
-      if (src && env && typeof env.imageResolver === "function") {
-        const resolved = env.imageResolver(src);
-        token.attrSet("src", resolved);
-      }
-      return defaultImage(tokens, idx, options, env, self);
-    };
-
-    // Inject Line Numbers Plugin
-    const injectLineNumbers = (md: MarkdownIt) => {
-      const rules = [
-        "paragraph_open",
-        "heading_open",
-        "list_item_open",
-        "blockquote_open",
-        "tr_open",
-        "code_block",
-        "fence",
-        "table_open",
-      ];
-
-      rules.forEach((rule) => {
-        const original =
-          md.renderer.rules[rule] || md.renderer.renderToken.bind(md.renderer);
-        md.renderer.rules[rule] = (tokens, idx, options, env, self) => {
-          const token = tokens[idx];
-          if (token.map) {
-            token.attrSet("data-line", String(token.map[0]));
-          }
-          return original.call(self, tokens, idx, options, env, self);
-        };
-      });
-    };
-    injectLineNumbers(this.md);
   }
 
   /**
@@ -166,73 +69,7 @@ export class MarkdownDiffProvider {
    * Asynchronously loads Markdown-it plugins that are ESM-only or heavy.
    */
   private async loadPlugins() {
-    try {
-      const plugins = await Promise.all([
-        // @ts-ignore
-        import("markdown-it-footnote"),
-        // @ts-ignore
-        import("markdown-it-mark"),
-        // @ts-ignore
-        import("markdown-it-sub"),
-        // @ts-ignore
-        import("markdown-it-sup"),
-        // @ts-ignore
-        import("markdown-it-emoji"),
-        // @ts-ignore
-        import("markdown-it-deflist"),
-        import("markdown-it-github-alerts"),
-      ]);
-
-      const [
-        footnoteMod,
-        markMod,
-        subMod,
-        supMod,
-        emojiMod,
-        deflistMod,
-        githubAlertsMod,
-      ] = plugins;
-
-      const getPlugin = (mod: any) => mod.default || mod;
-
-      const footnote = getPlugin(footnoteMod);
-      const mark = getPlugin(markMod);
-      const sub = getPlugin(subMod);
-      const sup = getPlugin(supMod);
-      const emoji = getPlugin(emojiMod);
-      const deflist = getPlugin(deflistMod);
-      const githubAlerts = getPlugin(githubAlertsMod);
-
-      if (typeof footnote === "function") {
-        this.md.use(footnote);
-      }
-      if (typeof mark === "function") {
-        this.md.use(mark);
-      }
-      if (typeof sub === "function") {
-        this.md.use(sub);
-      }
-      if (typeof sup === "function") {
-        this.md.use(sup);
-      }
-      // Emoji plugin exports an object with { bare, full, light }
-      // Use 'full' for complete emoji shortcode support
-      if (emoji && typeof emoji.full === "function") {
-        this.md.use(emoji.full);
-      } else if (typeof emoji === "function") {
-        this.md.use(emoji);
-      }
-      if (typeof deflist === "function") {
-        this.md.use(deflist);
-      }
-      if (typeof githubAlerts === "function") {
-        this.md.use(githubAlerts);
-      }
-
-      this.marp = await loadMarp();
-    } catch (e) {
-      console.error("Failed to load markdown plugins:", e);
-    }
+    this.marp = await loadMarkdownPlugins(this.md);
   }
 
 
