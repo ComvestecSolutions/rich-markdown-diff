@@ -837,6 +837,22 @@ export function getWebviewContent(
         body:not(.inline-mode) #left-pane .image-diff-block[data-mode="side-by-side"] .diff-image-new { display: none !important; }
         body:not(.inline-mode) #right-pane .image-diff-block[data-mode="side-by-side"] .diff-image-old { display: none !important; }
         
+        /* UX Refinement: In Split View, Left Pane always shows v1 and hides controls */
+        body:not(.inline-mode) #left-pane .image-diff-controls { display: none !important; }
+        body:not(.inline-mode) #left-pane .image-diff-block .diff-image-new { display: none !important; }
+        body:not(.inline-mode) #left-pane .image-diff-block .diff-image-old { 
+            display: block !important; 
+            opacity: 1 !important; 
+            clip-path: none !important; 
+            position: static !important; 
+            transform: none !important; 
+        }
+        body:not(.inline-mode) #left-pane .image-diff-wrapper { 
+            height: auto !important; 
+            display: flex !important; 
+            min-height: 100px !important;
+        }
+        
         /* Reset and display for image comparison containers (now using div instead of ins/del) */
         .image-diff-block .diff-image-old, 
         .image-diff-block .diff-image-new {
