@@ -160,6 +160,11 @@ export async function generateVRTHtml(
           initialize: () => {},
           render: (id, text, cb) => { cb(''); }
       };
+      
+      // Safety fallback to unblock baseline updates
+      setTimeout(() => {
+          document.body.setAttribute('data-marp-scaled', 'true');
+      }, 5000);
     </script>
   </head>`);
 

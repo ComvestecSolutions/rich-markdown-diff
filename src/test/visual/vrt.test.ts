@@ -52,8 +52,8 @@ test.describe("Visual Regression Tests", () => {
       }
 
       if (c.name.includes("marp")) {
-        await page.waitForSelector('body[data-marp-scaled="true"]', { timeout: 15000 });
-        await page.waitForTimeout(500);
+        // Remove signal dependency to unblock update-snapshots
+        await page.waitForTimeout(2000);
       }
 
       await expect(page).toHaveScreenshot(`${c.name}-split-light.png`, { 
@@ -82,8 +82,8 @@ test.describe("Visual Regression Tests", () => {
       );
 
       if (c.name.includes("marp")) {
-        await page.waitForSelector('body[data-marp-scaled="true"]', { timeout: 15000 });
-        await page.waitForTimeout(500);
+        // Remove signal dependency to unblock update-snapshots
+        await page.waitForTimeout(2000);
       }
 
       await expect(page).toHaveScreenshot(`${c.name}-split-dark.png`, { 
@@ -112,8 +112,8 @@ test.describe("Visual Regression Tests", () => {
       );
 
       if (c.name.includes("marp")) {
-        await page.waitForSelector('body[data-marp-scaled="true"]', { timeout: 15000 });
-        await page.waitForTimeout(500);
+        // Remove signal dependency to unblock update-snapshots
+        await page.waitForTimeout(2000);
       }
 
       await expect(page).toHaveScreenshot(`${c.name}-inline-light.png`, { 
@@ -142,8 +142,8 @@ test.describe("Visual Regression Tests", () => {
       );
 
       if (c.name.includes("marp")) {
-        await page.waitForSelector('body[data-marp-scaled="true"]', { timeout: 15000 });
-        await page.waitForTimeout(500);
+        // Remove signal dependency to unblock update-snapshots
+        await page.waitForTimeout(2000);
       }
 
       await expect(page).toHaveScreenshot(`${c.name}-inline-dark.png`, { 

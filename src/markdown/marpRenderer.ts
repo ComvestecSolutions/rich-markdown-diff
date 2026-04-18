@@ -31,10 +31,15 @@ export function cleanMarpHtml(html: string): { cleaned: string; scripts: string[
     },
   );
 
-  const fullyCleaned = cleaned.replace(
+  let fullyCleaned = cleaned.replace(
     /<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi,
     "",
   );
+
+  // Strip data-line from SVGs to fix Marp slide offsets
+  fullyCleaned = fullyCleaned.replace(/<svg\b[^>]*\sdata-line="[^"]*"[^>]*>/gi, (match) => {
+    return match.replace(/\sdata-line="[^"]*"/gi, "");
+  });
 
   return { cleaned: fullyCleaned, scripts };
 }
