@@ -1,5 +1,6 @@
 {
   "name": "rich-markdown-diff",
+  "packageManager": "pnpm@10.33.0",
   "publisher": "phine-apps",
   "displayName": "Rich Markdown Diff",
   "description": "Displays a rich, visual diff of two markdown files.",
@@ -323,8 +324,7 @@
     "onlyBuiltDependencies": [
       "@vscode/vsce-sign",
       "esbuild",
-      "keytar",
-      "reurl"
+      "keytar"
     ]
   }
 }
