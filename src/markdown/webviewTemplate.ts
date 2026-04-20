@@ -29,6 +29,12 @@ export function getWebviewContent(
   translations: Record<string, string> = {},
   marpCss?: string,
   marpJs?: string,
+  blameInfo?: {
+    original?: any;
+    modified?: any;
+  },
+  showGutterMarkers: boolean = true,
+  showGitBlame: boolean = true,
 ): string {
   const nonce = crypto.randomBytes(16).toString("hex");
 
@@ -175,6 +181,12 @@ export function getWebviewContent(
         .pane-content {
           position: relative;
           color: inherit;
+          padding: 10px 20px;
+          box-sizing: border-box;
+          min-height: 100%;
+        }
+        body.show-gutter-markers .pane-content {
+          padding-left: 24px; /* Room for markers only when enabled */
         }
         .pane-content > :first-child {
           margin-top: 0;
@@ -217,6 +229,87 @@ export function getWebviewContent(
             text-decoration: none; 
             border-bottom: 1px solid #22c55e;
             color: inherit;
+        }
+
+        /* Diff Gutter Markers */
+        body.show-gutter-markers .pane-content > *:has(ins),
+        body.show-gutter-markers .pane-content > *:has(del),
+        body.show-gutter-markers .pane-content > ins,
+        body.show-gutter-markers .pane-content > del {
+            position: relative;
+        }
+
+        body.show-gutter-markers .pane-content > *:has(ins)::after,
+        body.show-gutter-markers .pane-content > *:has(del)::after,
+        body.show-gutter-markers .pane-content > ins::after,
+        body.show-gutter-markers .pane-content > del::after {
+            content: "";
+            position: absolute;
+            left: -16px; /* Position in the gutter padding */
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            border-radius: 0 2px 2px 0;
+            z-index: 5;
+            display: none;
+        }
+
+        /* Pane Isolation for Side-by-Side Mode */
+        body.show-gutter-markers:not(.inline-mode) #left-pane .pane-content > *:has(del)::after,
+        body.show-gutter-markers:not(.inline-mode) #left-pane .pane-content > del::after {
+            display: block;
+            background-color: #ef4444; /* Red for deletions */
+        }
+
+        body.show-gutter-markers:not(.inline-mode) #right-pane .pane-content > *:has(ins)::after,
+        body.show-gutter-markers:not(.inline-mode) #right-pane .pane-content > ins::after {
+            display: block;
+            background-color: #22c55e; /* Green for insertions */
+        }
+
+        /* Inline Mode Logic */
+        body.show-gutter-markers.inline-mode .pane-content > *:has(ins):not(:has(del))::after,
+        body.show-gutter-markers.inline-mode .pane-content > ins::after {
+            display: block;
+            background-color: #22c55e;
+        }
+        body.show-gutter-markers.inline-mode .pane-content > *:has(del):not(:has(ins))::after,
+        body.show-gutter-markers.inline-mode .pane-content > del::after {
+            display: block;
+            background-color: #ef4444;
+        }
+        body.show-gutter-markers.inline-mode .pane-content > *:has(ins):has(del)::after {
+            display: block;
+            background-color: #3794ff; /* Blue for modified blocks */
+        }
+        
+        /* Overview Ruler */
+        .overview-ruler {
+            position: fixed;
+            right: 0;
+            top: 30px; /* Below header */
+            bottom: 0;
+            width: 14px;
+            background: rgba(127, 127, 127, 0.05);
+            border-left: 1px solid var(--vscode-panel-border);
+            z-index: 100;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .overview-marker {
+            position: absolute;
+            left: 2px;
+            right: 2px;
+            height: 3px;
+            min-height: 2px;
+            z-index: 101;
+            pointer-events: none;
+        }
+        .overview-marker.ins { background-color: rgba(34, 197, 94, 0.8); }
+        .overview-marker.del { background-color: rgba(239, 68, 68, 0.8); }
+        
+        body.inline-mode .overview-ruler {
+            top: 30px; /* Toolbar is 40px but header is hidden? Header is 30px. */
         }
 
         /* Scrollbar Styling */
@@ -315,6 +408,38 @@ export function getWebviewContent(
             color: var(--vscode-textBlockQuote-foreground);
             background-color: transparent;
         }
+
+        /* Blame Tooltip */
+        .blame-tooltip {
+            position: absolute;
+            z-index: 1000;
+            background-color: var(--vscode-editorWidget-background);
+            color: var(--vscode-editorWidget-foreground);
+            border: 1px solid var(--vscode-editorWidget-border);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            max-width: 280px;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .blame-tooltip .blame-author { font-weight: 600; color: var(--vscode-textLink-foreground); }
+        .blame-tooltip .blame-date { opacity: 0.7; margin-left: 8px; }
+        .blame-tooltip .blame-msg { margin-top: 4px; display: block; border-top: 1px solid rgba(127, 127, 127, 0.2); padding-top: 4px; }
+
+        /* Hover feedback for Blame info */
+        body.show-git-blame [data-line] {
+            cursor: help;
+            transition: background-color 0.1s ease;
+        }
+        body.show-git-blame [data-line]:hover {
+            background-color: var(--vscode-editor-wordHighlightBackground, rgba(127, 127, 127, 0.1));
+        }
+
         /* Ensure alerts don't inherit or double-up on blockquote borders */
         .markdown-alert {
             border-left: 0.25em solid;
@@ -504,6 +629,7 @@ export function getWebviewContent(
         ins:has(.katex-block), del:has(.katex-block),
         ins:has(.mermaid), del:has(.mermaid),
         ins:has(.footnote-item), del:has(.footnote-item),
+        ins:has(li), del:has(li),
         ins:has(pre), del:has(pre) {
             display: block;
             text-decoration: none;
@@ -569,37 +695,22 @@ export function getWebviewContent(
             display: none !important;
         }
 
+        /* Refactored tints using background gradients to avoid pseudo-element conflicts */
+        :is(.mermaid):is(:has(ins), :has(.diffins), :parent(:is(ins, .diffins))),
+        :is(.markdown-alert):is(:parent(:is(ins, .diffins))) {
+           background-image: linear-gradient(rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.1));
+           position: relative;
+        }
+
+        :is(.mermaid):is(:has(del), :has(.diffdel), :parent(:is(del, .diffdel))),
+        :is(.markdown-alert):is(:parent(:is(del, .diffdel))) {
+           background-image: linear-gradient(rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.1));
+           position: relative;
+        }
+
         /* Remove the background overlays (::after) by default, enabled only for diffs */
         .markdown-alert::after, .mermaid::after, pre::after {
             display: none;
-        }
-
-        /* 
-           Green/Red tints for complex blocks.
-           - Mermaid gets a full-block tint (SVG is opaque, we can't see through it).
-           - pre (code blocks) do NOT get the ::after overlay; granular ins/del markers
-             inside code are already coloured per-line and the overlay would hide them.
-           - Transparent blocks (Alerts) ONLY get tinted if the WHOLE block is changed.
-        */
-        :is(.mermaid):is(:has(ins), :has(.diffins), :parent(:is(ins, .diffins)))::after,
-        :is(.markdown-alert):is(:parent(:is(ins, .diffins)))::after {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(74, 222, 128, 0.2);
-            pointer-events: none;
-            display: block !important;
-            z-index: 1;
-        }
-        :is(.mermaid):is(:has(del), :has(.diffdel), :parent(:is(del, .diffdel)))::after,
-        :is(.markdown-alert):is(:parent(:is(del, .diffdel)))::after {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(248, 113, 113, 0.2);
-            pointer-events: none;
-            display: block !important;
-            z-index: 1;
         }
 
         /* Granular line-level diff highlights inside code blocks */
@@ -623,10 +734,10 @@ export function getWebviewContent(
 
 
 
-        ins:has(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure),
-        del:has(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure) {
+        ins:has(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > li, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure),
+        del:has(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > li, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure) {
             display: block;
-          width: auto;
+          width: fit-content;
           max-width: 100%;
         }
 
@@ -784,8 +895,21 @@ export function getWebviewContent(
         /* Ghost Element Hiding */
         .ghost-hidden { display: none !important; }
         /* CSS safety net: hide ghost list-item bullets added by markGhostListItems() */
-        body:not(.inline-mode) #left-pane  li[data-all-inserted] { display: none !important; }
+        body:not(.inline-mode) #left-pane  li[data-all-inserted],
         body:not(.inline-mode) #right-pane li[data-all-deleted]  { display: none !important; }
+
+        /* Ensure block insertions/deletions in lists have visible background colors */
+        li[data-all-inserted] {
+            background-color: rgba(34, 197, 94, 0.25) !important;
+            width: fit-content;
+            max-width: 100%;
+        }
+        li[data-all-deleted] {
+            background-color: rgba(248, 113, 113, 0.2) !important;
+            text-decoration: line-through;
+            width: fit-content;
+            max-width: 100%;
+        }
 
         /* Folded Region Styles */
         .folded-region {
@@ -1292,7 +1416,7 @@ export function getWebviewContent(
         }
     </style>
 </head>
-<body class="VRT_LAYOUT_CLASS ${marpCss ? "marp-mode" : ""}">
+<body class="VRT_LAYOUT_CLASS ${marpCss ? "marp-mode" : ""} ${showGutterMarkers ? "show-gutter-markers" : ""} ${showGitBlame ? "show-git-blame" : ""}">
     <div class="toolbar">
         <!-- Buttons removed, moved to VS Code View Actions -->
     <span id="status-msg" class="toolbar-status"></span>
@@ -1313,7 +1437,11 @@ export function getWebviewContent(
             </div>
         </div>
     </div>
+    <div class="overview-ruler" id="left-overview-ruler"></div>
+    <div class="overview-ruler" id="right-overview-ruler"></div>
+    <div id="blame-tooltip" class="blame-tooltip"></div>
     <script nonce="${nonce}">
+        const blameInfo = ${JSON.stringify(blameInfo || {})};
         const translations = ${JSON.stringify(translations)};
         const t = (key, ...args) => {
             let text = translations[key] || key;
@@ -1328,6 +1456,8 @@ export function getWebviewContent(
         const rightPane = document.getElementById('right-pane');
         const leftContent = document.getElementById('left-content');
         const rightContent = document.getElementById('right-content');
+        const leftRuler = document.getElementById('left-overview-ruler');
+        const rightRuler = document.getElementById('right-overview-ruler');
         const statusMsg = document.getElementById('status-msg');
 
         const runtimeDiagnostics = {
@@ -1524,6 +1654,23 @@ export function getWebviewContent(
             }
             // Recalculate changes because visibility changed
             scheduleLayoutRefresh();
+            updateOverviewRulerVisibility();
+        };
+
+        const updateOverviewRulerVisibility = () => {
+            if (isInline) {
+                leftRuler.style.display = 'none';
+                rightRuler.style.width = '14px';
+                rightRuler.style.left = 'auto';
+                rightRuler.style.right = '0';
+            } else {
+                leftRuler.style.display = 'block';
+                leftRuler.style.left = 'calc(50% - 14px)';
+                leftRuler.style.right = 'auto';
+                rightRuler.style.display = 'block';
+                rightRuler.style.left = 'auto';
+                rightRuler.style.right = '0';
+            }
         };
         
         /**
@@ -1873,7 +2020,106 @@ export function getWebviewContent(
                 statusMsg.textContent = t("Error: {0}", e.message);
                 statusMsg.style.color = 'red';
             }
+            updateOverviewRuler();
         }
+
+        function updateOverviewRuler() {
+            const drawRuler = (pane, ruler, els) => {
+                ruler.innerHTML = '';
+                const paneHeight = pane.scrollHeight;
+                if (paneHeight === 0) return;
+
+                const rulerHeight = ruler.clientHeight;
+                
+                els.forEach(item => {
+                    const el = item.el || item;
+                    const isIns = el.tagName === 'INS' || el.classList.contains('ins') || el.classList.contains('diffins');
+                    const isDel = el.tagName === 'DEL' || el.classList.contains('del') || el.classList.contains('diffdel');
+                    
+                    if (isIns || isDel) {
+                        const marker = document.createElement('div');
+                        marker.className = 'overview-marker ' + (isIns ? 'ins' : 'del');
+                        const topPct = (getRelativeTop(el, pane) / paneHeight) * 100;
+                        marker.style.top = topPct + '%';
+                        ruler.appendChild(marker);
+                    }
+                });
+            };
+
+            if (isInline) {
+                const changes = rightContent.querySelectorAll('ins, del');
+                const items = Array.from(changes).map(el => ({ el, pane: rightPane }));
+                drawRuler(rightPane, rightRuler, items);
+            } else {
+                const leftDels = leftContent.querySelectorAll('del');
+                const rightIns = rightContent.querySelectorAll('ins');
+                drawRuler(leftPane, leftRuler, Array.from(leftDels).map(el => ({ el, pane: leftPane })));
+                drawRuler(rightPane, rightRuler, Array.from(rightIns).map(el => ({ el, pane: rightPane })));
+            }
+        }
+
+        const handleRulerClick = (e, pane) => {
+            const ruler = e.currentTarget;
+            const rect = ruler.getBoundingClientRect();
+            const clickY = e.clientY - rect.top;
+            const pct = clickY / rect.height;
+            pane.scrollTop = pct * (pane.scrollHeight - pane.clientHeight);
+        };
+
+        leftRuler.addEventListener('click', (e) => handleRulerClick(e, leftPane));
+        rightRuler.addEventListener('click', (e) => handleRulerClick(e, rightPane));
+
+        // --- Blame Tooltip Logic ---
+        const tooltip = document.getElementById('blame-tooltip');
+        let tooltipTimeout;
+
+        const showBlame = (e) => {
+            const el = e.currentTarget;
+            const line = el.getAttribute('data-line');
+            if (line === null) return;
+
+            const pane = el.closest('#left-pane') ? 'original' : 'modified';
+            const info = blameInfo[pane]?.lines?.[parseInt(line, 10) + 1]; // porcelain is 1-indexed
+
+            if (info) {
+                clearTimeout(tooltipTimeout);
+                const date = new Date(info.authorTime * 1000).toLocaleDateString();
+                tooltip.innerHTML = \`<span class="blame-author">\${info.author}</span><span class="blame-date">\${date}</span><span class="blame-msg">\${info.summary}</span>\`;
+                tooltip.style.display = 'block';
+                
+                // Position relative to mouse
+                const x = Math.min(window.innerWidth - 300, e.clientX + 15);
+                const y = e.clientY + 15;
+                tooltip.style.left = x + 'px';
+                tooltip.style.top = y + 'px';
+                
+                requestAnimationFrame(() => tooltip.style.opacity = '1');
+            }
+        };
+
+        const hideBlame = () => {
+            tooltip.style.opacity = '0';
+            tooltipTimeout = setTimeout(() => {
+                tooltip.style.display = 'none';
+            }, 150);
+        };
+
+        // Attach to all elements with data-line
+        const attachBlameEvents = () => {
+             document.querySelectorAll('[data-line]').forEach(el => {
+                 el.removeEventListener('mouseenter', showBlame);
+                 el.addEventListener('mouseenter', showBlame);
+                 el.removeEventListener('mouseleave', hideBlame);
+                 el.addEventListener('mouseleave', hideBlame);
+             });
+        };
+
+        // MutationObserver is already looking at content, we can trigger re-attach there or in layout refresh
+        const originalCollectChanges = collectChanges;
+        collectChanges = () => {
+            originalCollectChanges();
+            attachBlameEvents();
+        };
 
         // --- Layout Stability ---
         let resizeTimeout;
@@ -2798,6 +3044,9 @@ export function getWebviewContent(
       setTimeout(() => {
           document.body.setAttribute('data-marp-scaled', 'true');
       }, 500);
+
+      // Initialize ruler visibility
+      updateOverviewRulerVisibility();
     </script>
     <script>/* VRT_SCRIPT_PLACEHOLDER */</script>
 </body>

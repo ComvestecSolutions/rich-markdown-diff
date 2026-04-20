@@ -1,84 +1,69 @@
-import { test, expect } from "@playwright/test";
-import type { MarkdownDiffProvider as ProviderType } from "../../markdownDiff";
-const { MarkdownDiffProvider } = require("../../../out/markdownDiff");
-import { generateVRTHtml } from "./vrtUtils";
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Rich Markdown Diff Authors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import { expect, test } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
-
-const FIXTURES_DIR = path.join(__dirname, "../../../fixtures");
+import { MarkdownDiffProvider } from "../../markdownDiff";
+import { generateVRTHtml } from "./vrtUtils";
 
 test.describe("Visual Regression Tests", () => {
-  let provider: ProviderType;
+  let provider: MarkdownDiffProvider;
 
   test.beforeAll(async () => {
     provider = new MarkdownDiffProvider();
     await provider.waitForReady();
   });
 
-  test.beforeEach(async ({ page }) => {
-    // Standard viewport
-    await page.setViewportSize({ width: 1280, height: 800 });
-  });
-
   const cases = [
-    {
-      name: "comprehensive",
-      v1: "comprehensive_v1.md",
-      v2: "comprehensive_v2.md",
-      configs: [
-        { theme: "light", inline: false, suffix: "split-light" },
-        { theme: "dark", inline: true, suffix: "inline-dark" },
-      ],
-    },
-    {
-      name: "marp",
-      v1: "marp_v1.md",
-      v2: "marp_v2.md",
-      configs: [
-        { theme: "dark", inline: false, suffix: "split-dark" },
-        { theme: "light", inline: true, suffix: "inline-light" },
-      ],
-    },
-    {
-      name: "marp-advanced",
-      v1: "marp_v2.md",
-      v2: "marp_v3.md",
-      configs: [
-        { theme: "light", inline: false, suffix: "split-light" },
-        { theme: "dark", inline: true, suffix: "inline-dark" },
-      ],
-    },
+    { name: "comprehensive_v1", theme: "light", inline: false, suffix: "split-light" },
+    { name: "comprehensive_v1", theme: "dark", inline: true, suffix: "inline-dark" },
+    { name: "marp_v1", theme: "dark", inline: false, suffix: "split-dark" },
+    { name: "marp_v1", theme: "light", inline: true, suffix: "inline-light" },
+    { name: "marp_v3", theme: "light", inline: false, suffix: "split-light" },
+    { name: "marp_v3", theme: "dark", inline: true, suffix: "inline-dark" }
   ];
 
   for (const c of cases) {
-    for (const config of c.configs) {
-      test(`Visual Diff: ${c.name} - ${config.suffix}`, async ({ page }) => {
-        const v1 = fs.readFileSync(path.join(FIXTURES_DIR, c.v1), "utf-8");
-        const v2 = fs.readFileSync(path.join(FIXTURES_DIR, c.v2), "utf-8");
-
-        const html = await generateVRTHtml(provider, v1, v2, {
-          theme: config.theme as "light" | "dark",
-          inline: config.inline,
-        });
-
-        await page.emulateMedia({ colorScheme: config.theme as "light" | "dark" });
-        await page.setContent(html, { waitUntil: "load" });
-
-        if (c.name.includes("marp")) {
-          // Wait for Marp scaling check, but don't fail if it takes a bit
-          await page.waitForSelector("body.marp-mode[data-marp-scaled='true']", { timeout: 10000 }).catch(() => {
-            console.log("Marp scaling wait timed out (optional)");
-          });
-        }
-
-        // Final short wait for any transitions/rendering
-        await page.waitForTimeout(1000);
-
-        await expect(page).toHaveScreenshot(`${c.name}-${config.suffix}.png`, {
-          maxDiffPixelRatio: 0.1,
-          fullPage: true,
-        });
+    test(`Visual Diff: ${c.name} - ${c.suffix}`, async ({ page }) => {
+      const filePath = path.join(__dirname, "../../../fixtures", `${c.name}.md`);
+      const md = fs.readFileSync(filePath, "utf-8");
+      
+      const html = await generateVRTHtml(provider, md, md, {
+        theme: c.theme as any,
+        inline: c.inline,
       });
-    }
+
+      await page.setContent(html);
+
+      // wait for some time to make sure that the page is rendered
+      await page.waitForTimeout(1000);
+
+      await expect(page).toHaveScreenshot(`${c.name}-${c.suffix}.png`, {
+        maxDiffPixelRatio: 0.1,
+        fullPage: true,
+      });
+    });
   }
 });

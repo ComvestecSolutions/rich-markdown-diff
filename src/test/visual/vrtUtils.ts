@@ -7,7 +7,13 @@ export async function generateVRTHtml(
   provider: ProviderType,
   oldMarkdown: string,
   newMarkdown: string,
-  options: { inline?: boolean; theme?: "light" | "dark" } = {}
+  options: { 
+    inline?: boolean; 
+    theme?: "light" | "dark";
+    blameInfo?: any;
+    showGutterMarkers?: boolean;
+    showGitBlame?: boolean;
+  } = {}
 ): Promise<string> {
   const { html: diffHtml, marpCss, marpJs } = provider.computeDiff(
     oldMarkdown,
@@ -76,7 +82,10 @@ export async function generateVRTHtml(
     "*",
     translations,
     marpCss,
-    marpJs
+    marpJs,
+    options.blameInfo,
+    options.showGutterMarkers ?? true,
+    options.showGitBlame ?? true
   );
 
   // Inject Theme Variables via placeholder
@@ -155,6 +164,13 @@ export async function generateVRTHtml(
     </style>
     <script>
       window.VRT_ENVIRONMENT = true;
+      // Mock acquireVsCodeApi to prevent ReferenceError in non-VSCode environment
+      window.acquireVsCodeApi = () => ({
+          postMessage: (msg) => { console.log('VSCode PostMessage:', msg); },
+          getState: () => ({}),
+          setState: () => {}
+      });
+
       // Mock Mermaid to prevent ReferenceError since we stripped the script
       window.mermaid = {
           initialize: () => {},

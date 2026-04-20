@@ -310,7 +310,7 @@ describe("Fixture Snapshot Tests", () => {
 
       // Definition lists render with <dl>, <dt>, <dd>
       assert.ok(
-        diff.includes("<dl>") || diff.includes("<dt>") || diff.includes("<dd>"),
+        diff.includes("<dl") || diff.includes("<dt") || diff.includes("<dd"),
         "Should render definition lists",
       );
     });

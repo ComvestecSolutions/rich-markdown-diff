@@ -61,9 +61,7 @@ function configureRules(md: MarkdownIt) {
 
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    const info = token.info
-      ? md.utils.unescapeAll(token.info).trim()
-      : "";
+    const info = token.info ? md.utils.unescapeAll(token.info).trim() : "";
 
     if (info === "mermaid") {
       const escapedContent = escapeHtml(token.content);
@@ -106,6 +104,8 @@ function injectLineNumbers(md: MarkdownIt) {
     "fence",
     "table_open",
     "math_block",
+    "dt_open",
+    "dd_open",
   ];
 
   rules.forEach((rule) => {
@@ -113,18 +113,49 @@ function injectLineNumbers(md: MarkdownIt) {
       md.renderer.rules[rule] || md.renderer.renderToken.bind(md.renderer);
     md.renderer.rules[rule] = (tokens, idx, options, env, self) => {
       const token = tokens[idx];
-      if (token.map) {
-        token.attrSet("data-line", String(token.map[0]));
-        token.attrSet("data-line-end", String(token.map[1]));
+      let startLine = token.map ? token.map[0] : undefined;
+      let endLine = token.map ? token.map[1] : undefined;
+
+      // Heuristics for Definition Lists (markdown-it-deflist has inaccurate maps)
+      if (
+        token.type === "dt_open" &&
+        startLine !== undefined &&
+        startLine === endLine
+      ) {
+        // dt often has [i, i] map, making it empty. Force it to be at least 1 line.
+        endLine = startLine + 1;
+      } else if (token.type === "dd_open" && startLine !== undefined) {
+        // dd often starts at the same line as the preceding dt.
+        // If it does, and it's followed by content on the same line (tight list)
+        // or next lines, we should shift it to at least i + 1.
+        for (let i = idx - 1; i >= 0; i--) {
+          const prev = tokens[i];
+          if (prev.type === "dl_open") {
+            break;
+          }
+          if (prev.type === "dt_open" && prev.map) {
+            if (prev.map[0] === startLine) {
+              startLine++;
+            }
+            break;
+          }
+        }
+      }
+
+      const hasMap = startLine !== undefined && endLine !== undefined;
+
+      if (hasMap) {
+        token.attrSet("data-line", String(startLine));
+        token.attrSet("data-line-end", String(endLine));
       }
       let html = original.call(self, tokens, idx, options, env, self);
 
       // If the original renderer didn't include the data attributes (common with plugins),
       // try to inject them into the first tag of the output.
-      if (token.map && html && !html.includes("data-line=")) {
+      if (hasMap && html && !html.includes("data-line=")) {
         html = html.replace(
           /^(<[a-z1-6]+)/i,
-          `$1 data-line="${token.map[0]}" data-line-end="${token.map[1]}"`,
+          `$1 data-line="${startLine}" data-line-end="${endLine}"`,
         );
       }
       return html;

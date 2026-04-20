@@ -64,4 +64,13 @@ describe("Double Click Navigation", () => {
       "List diff should contain data-line attributes",
     );
   });
+
+  it("should inject data-line attributes into definition lists", () => {
+    const md = "Term 1\n: Definition 1";
+    const { html: diff } = provider.computeDiff(md, md);
+    assert.ok(
+      diff.includes("data-line="),
+      "Definition List diff should contain data-line attributes",
+    );
+  });
 });

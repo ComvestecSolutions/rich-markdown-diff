@@ -62,12 +62,18 @@ describe("MarkdownDiffProvider - Checkboxes", () => {
     const newMd = "- [x] Task 1";
     const { html: diff } = provider.computeDiff(oldMd, newMd);
 
-    // This is tricky because the diff happens at HTML level.
-    // htmldiff-js might wrap the whole list item or just parts of it.
-    // We mainly want to ensure it doesn't crash and output contains checkboxes.
+    // Should contain both the deleted unchecked box and inserted checked box
+    assert.ok(
+      diff.includes("<del") && diff.includes("<ins"),
+      "Should wrap checkbox changes in ins/del tags",
+    );
     assert.ok(
       diff.includes('type="checkbox"'),
-      "Should contain checkbox input",
+      "Should still contain checkbox inputs",
+    );
+    assert.ok(
+      diff.includes("checked"),
+      "Should contain the new checked state",
     );
   });
 });

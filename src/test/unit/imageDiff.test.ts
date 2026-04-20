@@ -67,6 +67,7 @@ describe("MarkdownDiffProvider - Image Diff", () => {
     const { html: diff } = provider.computeDiff(oldMd, newMd);
 
     assert.ok(diff.includes('class="image-diff-block"'), "Should contain image-diff-block class");
+    assert.ok(diff.includes('data-image-diff="true"'), "Should contain data-image-diff attribute");
     assert.ok(diff.includes('div class="diff-image-old"'), "Should contain diff-image-old div");
     assert.ok(diff.includes('div class="diff-image-new"'), "Should contain diff-image-new div");
     assert.ok(diff.includes('src="old.png"'), "Should contain old image src");
