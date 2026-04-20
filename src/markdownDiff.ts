@@ -222,6 +222,12 @@ export class MarkdownDiffProvider {
     translations: Record<string, string> = {},
     marpCss?: string,
     marpJs?: string,
+    blameInfo?: {
+      original?: any;
+      modified?: any;
+    },
+    showGutterMarkers: boolean = true,
+    showGitBlame: boolean = true,
   ): string {
     return getWebviewContent(
       diffHtml,
@@ -235,6 +241,9 @@ export class MarkdownDiffProvider {
       translations,
       marpCss,
       marpJs,
+      blameInfo,
+      showGutterMarkers,
+      showGitBlame,
     );
   }
 }

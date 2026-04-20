@@ -174,7 +174,7 @@ describe("MarkdownDiffProvider", () => {
       diff.includes("diff-list-container-change"),
       "Definition-list swaps should be tagged as structural list-container changes",
     );
-    assert.ok(diff.includes("<dl>"), "Should preserve the definition list");
+    assert.ok(diff.includes("<dl"), "Should preserve the definition list");
     assert.ok(diff.includes("<ul>"), "Should preserve the unordered list");
     assert.ok(
       !diff.includes("<dl><ul>") && !diff.includes("<ul><dl>"),
@@ -192,7 +192,7 @@ describe("MarkdownDiffProvider", () => {
       "Ordered-list to definition-list swaps should be tagged as structural list-container changes",
     );
     assert.ok(diff.includes("<ol>"), "Should preserve the ordered list");
-    assert.ok(diff.includes("<dl>"), "Should preserve the definition list");
+    assert.ok(diff.includes("<dl"), "Should preserve the definition list");
     assert.ok(
       !diff.includes("<ol><dl>") && !diff.includes("<dl><ol>"),
       "Should not leave invalid ordered-list and definition-list nesting when the list type changes",
@@ -204,9 +204,9 @@ describe("MarkdownDiffProvider", () => {
     const newMd = "Term 1\n: One\n\nTerm 2\n: Two";
     const { html: diff } = provider.computeDiff(oldMd, newMd);
 
-    assert.ok(diff.includes("<dl>"), "Should preserve the definition list");
-    assert.ok(diff.includes("<dt>"), "Should preserve definition terms");
-    assert.ok(diff.includes("<dd>"), "Should preserve definition values");
+    assert.ok(diff.includes("<dl"), "Should preserve the definition list");
+    assert.ok(diff.includes("<dt"), "Should preserve definition terms");
+    assert.ok(diff.includes("<dd"), "Should preserve definition values");
     assert.ok(
       !diff.includes("diff-list-container-change"),
       "Same-type definition list edits should stay granular instead of becoming structural replacements",
@@ -577,7 +577,7 @@ describe("MarkdownDiffProvider", () => {
       "heading-prefix class should prevent number prefixes from wrapping",
     );
     assert.ok(
-      /ins:has\(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure\),[\s\S]*del:has\(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure\) \{[\s\S]*display: block;/m.test(
+      /ins:has\(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > li, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure\),[\s\S]*del:has\(> h1, > h2, > h3, > h4, > h5, > h6, > p, > img, > table, > ul, > ol, > dl, > li, > blockquote, > div, > pre, > hr, > section, > details, > summary, > figure\) \{[\s\S]*display: block;[\s\S]*width: fit-content;/m.test(
         webviewContent,
       ),
       "Modified headings should be set as block elements so the background color spans the full pane width",

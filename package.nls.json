@@ -10,5 +10,7 @@
   "rich-markdown-diff.nextChange.title": "Next Change",
   "rich-markdown-diff.prevChange.title": "Previous Change",
   "rich-markdown-diff.category": "Markdown Diff",
-  "rich-markdown-diff.customEditor.displayName": "Markdown Diff Preview"
+  "rich-markdown-diff.customEditor.displayName": "Markdown Diff Preview",
+  "rich-markdown-diff.showGutterMarkers.description": "Whether to show vertical diff markers in the gutter area.",
+  "rich-markdown-diff.showGitBlame.description": "Whether to show Git Blame information (author, date, message) on hover."
 }

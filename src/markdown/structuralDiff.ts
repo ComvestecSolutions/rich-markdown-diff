@@ -12,6 +12,7 @@ export function diffHtmlFragments(
     allTokens?: Record<string, string>;
     skipRefinement?: boolean;
     tokenizeCodeBlocks?: boolean;
+    tokenizeListContainers?: boolean;
   } = {},
 ): string {
   // Use the full tokenization pipeline in fragments to prevent mangling complex blocks
@@ -23,6 +24,7 @@ export function diffHtmlFragments(
     {
       skipRefinement: options.skipRefinement,
       tokenizeCodeBlocks: options.tokenizeCodeBlocks,
+      tokenizeListContainers: options.tokenizeListContainers,
     },
   ).diff;
 }
@@ -36,22 +38,37 @@ export function executeWithFullPipeline(
   newHtml: string,
   execute: (old: string, newVal: string) => string,
   allTokens: Record<string, string>,
-  options: { skipRefinement?: boolean; tokenizeCodeBlocks?: boolean } = {},
+  options: { 
+    skipRefinement?: boolean; 
+    tokenizeCodeBlocks?: boolean;
+    tokenizeListContainers?: boolean;
+  } = {},
 ): { diff: string; tokens: Record<string, string> } {
   // 1. Identify complex blocks FIRST to protect them from fragmentation
   const tokenizeCodeBlocks = options.tokenizeCodeBlocks !== false;
-  const { html: oldT, tokens: t1 } = replaceComplexBlocksWithTokens(oldHtml, { tokenizeCodeBlocks });
-  const { html: newT, tokens: t2 } = replaceComplexBlocksWithTokens(newHtml, { tokenizeCodeBlocks });
+  const tokenizeListContainers = options.tokenizeListContainers ?? true;
+  const { html: oldT, tokens: t1 } = replaceComplexBlocksWithTokens(oldHtml, { 
+    tokenizeCodeBlocks,
+    tokenizeListContainers
+  });
+  const { html: newT, tokens: t2 } = replaceComplexBlocksWithTokens(newHtml, { 
+    tokenizeCodeBlocks,
+    tokenizeListContainers
+  });
 
   // 2. Mask block attributes to prevent noise from IDs, classes, and line numbers
   const { masked: oldMasked, attributes: oldAttrs } = maskBlockAttributes(oldT);
   const { masked: newMasked, attributes: newAttrs } = maskBlockAttributes(newT);
 
-  const localTokens = { ...allTokens, ...t1, ...t2 };
+  // 3. Materialize checkboxes into text to ensure htmldiff detects state changes
+  const { html: oldM, tokens: cbTokensOld } = materializeCheckboxes(oldMasked);
+  const { html: newM, tokens: cbTokensNew } = materializeCheckboxes(newMasked);
 
-  let diff = execute(oldMasked, newMasked);
+  const localTokens = { ...allTokens, ...t1, ...t2, ...cbTokensOld, ...cbTokensNew };
 
-  // Apply pre-restoration fixes (like nesting and checkboxes)
+  let diff = execute(oldM, newM);
+
+  // Apply pre-restoration fixes (like nesting)
   diff = applyPreRestorePipeline(diff);
 
   // 4. Token restoration
@@ -106,10 +123,11 @@ export function applyStructuralDiffPipeline(
   result = splitMixedBlockInsertions(result);
   result = splitConsolidatedDiffs(result);
 
-  const skipRefinementExecute = (old: string, newVal: string) =>
+  const skipRefinementExecute = (old: string, newVal: string, options: { tokenizeListContainers?: boolean } = {}) =>
     diffHtmlFragments(old, newVal, execute, {
       allTokens,
       skipRefinement: true,
+      tokenizeListContainers: options.tokenizeListContainers,
     });
 
   result = refineBlockDiffs(result, skipRefinementExecute, allTokens);
@@ -292,15 +310,25 @@ export function replaceComplexBlocksWithTokens(
   });
 }
 
-export function replaceCheckboxesWithTokens(html: string): {
+export function materializeCheckboxes(html: string): {
   html: string;
   tokens: Record<string, string>;
 } {
   const tokens: Record<string, string> = {};
   const regex = /<input[^>]+class="task-list-item-checkbox"[^>]*>/gi;
 
+  let index = 0;
   const result = html.replace(regex, (match) => {
-    const token = createToken(match, "CHECKBOX", tokens);
+    const isChecked = /\bchecked\b/i.test(match);
+    const state = isChecked ? "CHECKED" : "UNCHECKED";
+    
+    // Use a hash of the content to ensure consistency, but also an index to distinguish 
+    // identical checkboxes on different lines.
+    const hash = crypto.createHash("md5").update(match).digest("hex").substring(0, 8);
+    const token = `CBTOKEN_${index}_${hash}_${state}`;
+    
+    tokens[token] = match;
+    index++;
     return token;
   });
 
@@ -514,7 +542,8 @@ export function restoreComplexTokens(
 
     for (const token of keys) {
       if (restored.includes(token)) {
-        restored = restored.replace(new RegExp(token, "g"), tokens[token]);
+        const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        restored = restored.replace(new RegExp(escapedToken, "g"), tokens[token]);
         hasMoreTokens = true;
       }
     }
@@ -632,9 +661,10 @@ export function refineBlockDiffs(
         );
       }
 
-      return execute(
+      return (execute as any)(
         `<${oldTag}${oldAttrs}>${oldContent}</${oldTag}>`,
         `<${newTag}${newAttrs}>${newContent}</${newTag}>`,
+        { tokenizeListContainers: false }
       );
     },
   );

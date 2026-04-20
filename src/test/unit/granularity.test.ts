@@ -80,5 +80,44 @@ describe("Granularity Tests", () => {
     // Check if the text "New equation added:" is wrapped in <ins>
     assert.ok(/<ins[^>]*>[\s\S]*?New equation added:[\s\S]*?<\/ins>/i.test(diffHtml), "Text should be wrapped in <ins>");
   });
+
+  it("should handle multiple heading splits correctly", () => {
+    // Adding a new section between existing sections
+    const oldMd = "# Title\n\n## Section 1\n\nText 1\n\n## Section 2\n\nText 2";
+    const newMd = "# Title\n\n## Section 1\n\nText 1\n\n## New Section\n\nNew Text\n\n## Section 2\n\nText 2";
+    
+    const { html: diffHtml } = provider.computeDiff(oldMd, newMd);
+
+    // Both "Section 1" and "Section 2" should exist as stable headings
+    assert.ok(diffHtml.includes("Section 1"), "Section 1 should be present");
+    assert.ok(diffHtml.includes("Section 2"), "Section 2 should be present");
+    assert.ok(diffHtml.includes("New Section"), "New Section should be present");
+
+    // "Section 2" should NOT be wrapped in an <ins> tag because it existed in the old doc
+    const hasOuterInsForS2 = /<ins[^>]*>\s*<h2[^>]*>Section 2/i.test(diffHtml);
+    assert.strictEqual(hasOuterInsForS2, false, "Section 2 should be recognized as common, not a full insertion");
+  });
+
+  it("should preserve KaTeX block structure during refinement", () => {
+    // Modifying text around a math block
+    const oldMd = "Before\n\n$$\ne=mc^2\n$$\n\nAfter";
+    const newMd = "Before (update)\n\n$$\ne=mc^2\n$$\n\nAfter (update)";
+    
+    const { html: diffHtml } = provider.computeDiff(oldMd, newMd);
+
+    // The math block itself should be unchanged and thus have NO diff markers wrapping it
+    // (Consolidation might try to group it if we're not careful)
+    const mathBlockRegex = /<p[^>]*class="katex-block"[\s\S]*?<\/p>/i;
+    const mathMatch = diffHtml.match(mathBlockRegex);
+    assert.ok(mathMatch, "Math block should be present");
+    
+    const mathContent = mathMatch[0];
+    assert.strictEqual(mathContent.includes("<ins"), false, "Math block content should not contain insertions");
+    assert.strictEqual(mathContent.includes("<del"), false, "Math block content should not contain deletions");
+    
+    // Ensure it's not wrapped in a diff tag
+    const wrappedInDiff = /<(ins|del)[^>]*>\s*<p[^>]*class="katex-block"/i.test(diffHtml);
+    assert.strictEqual(wrappedInDiff, false, "Math block should not be wrapped in outer diff tags when unchanged");
+  });
 });
 

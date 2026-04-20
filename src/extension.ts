@@ -29,6 +29,7 @@ import {
   resolveSingleFileComparison,
   tryGetGitApi,
 } from "./gitDiffResolver";
+import { resolveBlameInfo } from "./gitBlameResolver";
 import { getCommandTarget, getFileUriFromCommandArg } from "./commandTarget";
 import * as path from "path";
 import * as l10n from "@vscode/l10n";
@@ -52,6 +53,7 @@ let activeEditorRepositorySubscription: vscode.Disposable | undefined;
 let contextUpdateGeneration = 0;
 let lastCanShowRenderedDiff: boolean | undefined;
 let runtimeDiagnosticsChannel: vscode.OutputChannel | undefined;
+const openPanelUpdateHandlers = new Set<(trigger: DiffPanelUpdateTrigger) => void>();
 
 const markdownExtensions = [
   ".md",
@@ -566,6 +568,9 @@ async function renderDiffPanel(
   const originalContent = await readDocumentText(state.originalUri);
   const modifiedContent = await readDocumentText(state.modifiedUri);
 
+  const originalBlame = state.originalUri ? await resolveBlameInfo(state.originalUri) : undefined;
+  const modifiedBlame = state.modifiedUri ? await resolveBlameInfo(state.modifiedUri) : undefined;
+
   const contentKey = `${originalContent}\0${modifiedContent}\0${state.leftLabel}\0${state.rightLabel}`;
   if (lastContentKey !== undefined && contentKey === lastContentKey) {
     return contentKey;
@@ -574,6 +579,10 @@ async function renderDiffPanel(
   await diffProvider.waitForReady();
 
   const resolver = createImageResolver(state.imageBaseUri, panel.webview);
+  const config = vscode.workspace.getConfiguration("rich-markdown-diff");
+  const showGutterMarkers = config.get<boolean>("showGutterMarkers", true);
+  const showGitBlame = config.get<boolean>("showGitBlame", true);
+
   const { html: diffHtml, marpCss, marpJs } = diffProvider.computeDiff(
     originalContent,
     modifiedContent,
@@ -597,6 +606,12 @@ async function renderDiffPanel(
     getWebviewTranslations(),
     marpCss,
     marpJs,
+    {
+      original: originalBlame,
+      modified: modifiedBlame,
+    },
+    showGutterMarkers,
+    showGitBlame,
   );
 
   return contentKey;
@@ -649,6 +664,8 @@ async function bindDiffPanel(
       queuedTrigger = trigger;
     }
   };
+
+  openPanelUpdateHandlers.add(scheduleUpdate);
 
   const update = async (trigger: DiffPanelUpdateTrigger) => {
     if (isDisposed) {
@@ -707,6 +724,16 @@ async function bindDiffPanel(
     }
   };
 
+  const configSubscription = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (
+      e.affectsConfiguration("rich-markdown-diff.showGutterMarkers") ||
+      e.affectsConfiguration("rich-markdown-diff.showGitBlame")
+    ) {
+      lastContentKey = undefined; // Force re-render
+      scheduleUpdate("document");
+    }
+  });
+
   const documentSubscription = vscode.workspace.onDidChangeTextDocument((e) => {
     if (!currentState) {
       return;
@@ -724,7 +751,9 @@ async function bindDiffPanel(
 
   panel.onDidDispose(() => {
     isDisposed = true;
+    openPanelUpdateHandlers.delete(scheduleUpdate);
     documentSubscription.dispose();
+    configSubscription.dispose();
     repositorySubscription?.dispose();
     if (timeout) {
       clearTimeout(timeout);

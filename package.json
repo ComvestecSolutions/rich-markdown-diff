@@ -167,6 +167,11 @@
           "when": "activeWebviewPanelId == 'markdown.preview' || activeCustomEditorId == 'vscode.markdown.preview.editor'"
         },
         {
+          "command": "rich-markdown-diff.showRenderedDiff",
+          "group": "navigation",
+          "when": "isInDiffEditor && resourceLangId == markdown"
+        },
+        {
           "command": "rich-markdown-diff.prevChange",
           "group": "navigation@1",
           "when": "rich-markdown-diff.isDiffActive"
@@ -241,6 +246,21 @@
           "when": "scmProvider == git"
         }
       ]
+    },
+    "configuration": {
+      "title": "Rich Markdown Diff",
+      "properties": {
+        "rich-markdown-diff.showGutterMarkers": {
+          "type": "boolean",
+          "default": true,
+          "description": "%rich-markdown-diff.showGutterMarkers.description%"
+        },
+        "rich-markdown-diff.showGitBlame": {
+          "type": "boolean",
+          "default": true,
+          "description": "%rich-markdown-diff.showGitBlame.description%"
+        }
+      }
     },
     "customEditors": [
       {
