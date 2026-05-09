@@ -107,12 +107,9 @@ export function executeWithFullPipeline(
   const CHUNK_THRESHOLD = 50000;
 
   if (oldM.length + newM.length > CHUNK_THRESHOLD) {
-    diff = chunkedExecute(oldM, newM, (o, n) => {
-      let d = execute(o, n);
-      d = restoreBlockAttributes(d, oldPools, newPools, sharedToken);
-      return d;
-    });
-    // Ensure headers and any other parts outside chunked content are also restored
+    diff = chunkedExecute(oldM, newM, execute);
+    // Restore the original attributes into the diff IMMEDIATELY after chunked diffing
+    // to ensure all segments (including those that bypassed the callback) are restored.
     diff = restoreBlockAttributes(diff, oldPools, newPools, sharedToken);
   } else {
     diff = execute(oldM, newM);
@@ -166,49 +163,87 @@ export function splitBySections(
     content: string;
     full: string;
   }[] = [];
-  const headerRegex = /<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>/gi;
 
   const getHeaderText = (h: string) => h.replace(/<[^>]+>/g, "").trim();
 
+  let i = 0;
   let lastIndex = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = headerRegex.exec(html)) !== null) {
-    const matchIndex = match.index;
-    if (matchIndex > lastIndex) {
-      const content = html.substring(lastIndex, matchIndex);
-      if (content.trim()) {
-        sections.push({ header: "", headerText: "", content, full: content });
+  while (i < html.length) {
+    if (html[i] === "<") {
+      // Look for a section-splitting header (h1-h3) at the CURRENT level
+      const hMatch = html.substring(i).match(/^<(h[1-3])\b[^>]*>/i);
+      if (hMatch) {
+        const tagName = hMatch[1];
+        const closingPos = findClosing(html, i, tagName);
+
+        if (closingPos !== -1) {
+          // 1. Content BEFORE this header belongs to the PREVIOUS section
+          if (i > lastIndex) {
+            const prevContent = html.substring(lastIndex, i);
+            if (sections.length === 0) {
+              sections.push({
+                header: "",
+                headerText: "",
+                content: prevContent,
+                full: prevContent,
+              });
+            } else {
+              sections[sections.length - 1].content += prevContent;
+              sections[sections.length - 1].full += prevContent;
+            }
+          }
+
+          // 2. Start a new section with this header
+          const headerFull = html.substring(i, closingPos);
+          sections.push({
+            header: headerFull,
+            headerText: getHeaderText(headerFull),
+            content: "",
+            full: headerFull,
+          });
+
+          i = closingPos;
+          lastIndex = i;
+          continue;
+        }
+      }
+
+      // 3. To maintain integrity, if we see any other tag, skip to its closing tag
+      // so we don't accidentally split inside a blockquote/div/etc.
+      const otherTagMatch = html.substring(i).match(/^<([a-z0-9]+)\b[^>]*>/i);
+      if (otherTagMatch) {
+        const tagName = otherTagMatch[1];
+        // Skip void tags
+        if (
+          !["br", "hr", "img", "input", "meta", "link"].includes(
+            tagName.toLowerCase(),
+          )
+        ) {
+          const closingPos = findClosing(html, i, tagName);
+          if (closingPos !== -1) {
+            i = closingPos;
+            continue;
+          }
+        }
       }
     }
-
-    const headerFull = match[0];
-    const headerText = getHeaderText(headerFull);
-
-    // Find content until next header
-    const nextMatch = headerRegex.exec(html);
-    const endIndex = nextMatch ? nextMatch.index : html.length;
-    // Reset regex index because we peeked ahead
-    headerRegex.lastIndex = matchIndex + headerFull.length;
-
-    const sectionContent = html.substring(
-      matchIndex + headerFull.length,
-      endIndex,
-    );
-    sections.push({
-      header: headerFull,
-      headerText,
-      content: sectionContent,
-      full: html.substring(matchIndex, endIndex),
-    });
-
-    lastIndex = endIndex;
+    i++;
   }
 
+  // 4. Final trailing content
   if (lastIndex < html.length) {
-    const content = html.substring(lastIndex);
-    if (content.trim()) {
-      sections.push({ header: "", headerText: "", content, full: content });
+    const finalContent = html.substring(lastIndex);
+    if (sections.length === 0) {
+      sections.push({
+        header: "",
+        headerText: "",
+        content: finalContent,
+        full: finalContent,
+      });
+    } else {
+      sections[sections.length - 1].content += finalContent;
+      sections[sections.length - 1].full += finalContent;
     }
   }
 
@@ -813,28 +848,37 @@ export function replaceBalancedTags(
     // Math (KaTeX)
     const mathBlockMatch = html
       .substring(i)
-      .match(/^<p\s[^>]*class=['"]katex-block['"][^>]*>/i);
+      .match(/^<(p|div)\s[^>]*class=['"][^"']*\bkatex-(?:block|display)\b[^"']*['"][^>]*>/i);
     if (mathBlockMatch) {
+      console.log(`[DEBUG] Found KaTeX block match at ${i}: ${mathBlockMatch[0]}`);
       const start = i;
-      const end = findClosing(html, i, "p");
+      const tagName = mathBlockMatch[1].toLowerCase();
+      const end = findClosing(html, i, tagName);
       if (end > -1) {
         const content = html.substring(start, end);
         const token = createToken(content, "MATHBLOCK", tokens);
+        console.log(`[DEBUG] Tokenized KaTeX block ${token}`);
         result += token;
         i = end;
         continue;
       } else {
-        console.warn(`Failed to find closing tag for KaTeX block at index ${i}`);
+        console.warn(
+          `Failed to find closing tag for KaTeX ${tagName} at index ${i}`,
+        );
       }
     }
 
-    const mathInlineMatch = html.substring(i).match(/^<span\s[^>]*class=['"]katex['"][^>]*>/i);
+    const mathInlineMatch = html
+      .substring(i)
+      .match(/^<span\s[^>]*class=['"][^"']*\bkatex\b[^"']*['"][^>]*>/i);
     if (mathInlineMatch) {
+      console.log(`[DEBUG] Found KaTeX inline match at ${i}: ${mathInlineMatch[0]}`);
       const start = i;
       const end = findClosing(html, i, "span");
       if (end > -1) {
         const content = html.substring(start, end);
         const token = createToken(content, "MATH", tokens);
+        console.log(`[DEBUG] Tokenized KaTeX inline ${token}`);
         result += token;
         i = end;
         continue;
@@ -1703,7 +1747,15 @@ export function fixInvalidNesting(html: string): string {
     `<(ins|del)\\b([^>]*?)>${noBlockOrDiff}<\\/(${inlineTags})>${noBlockOrDiff}<\\/\\1>`,
     "gi",
   );
-  fixed = fixed.replace(pattern, "<$1$2>$3$5</$4></$1>");
+  fixed = fixed.replace(
+    pattern,
+    (match, t1, a1, c1, t2, c2) => {
+      if (t2.toLowerCase() === "span" && match.includes("class=\"katex\"")) {
+         return match;
+      }
+      return `<${t1}${a1}>${c1}${c2}</${t1}></${t2}>`;
+    },
+  );
 
   // 2. Remove redundant nested diff tags (e.g., <ins><ins>...</ins></ins>)
   fixed = fixed.replace(
@@ -1722,6 +1774,9 @@ export function fixInvalidNesting(html: string): string {
   fixed = fixed.replace(
     reversePattern,
     (match, itag, iattrs, c1, dtag, dattrs, c2, c3) => {
+      if (itag.toLowerCase() === "span" && iattrs.includes("katex")) {
+        return match;
+      }
       const dclass = dtag === "ins" ? "diffins" : "diffdel";
       return `<${dtag} class="${dclass}">${c1}<${itag}${iattrs}>${c2}</${itag}>${c3}</${dtag}>`;
     },
@@ -1901,7 +1956,7 @@ export function verifyDiffIntegrity(
 
   // Allow a very small margin of error (e.g. 2%) for edge cases where htmldiff
   // might legitimately combine or slightly transform words (e.g. case changes, punctuation).
-  const failureThreshold = 0.5; // High threshold for debugging
+  const failureThreshold = 0.005; // 0.5% margin of error
   const missingRatio = missingCount / sampleSize;
   const isBroken = missingRatio > failureThreshold;
 
@@ -1919,7 +1974,7 @@ export function verifyDiffIntegrity(
     console.warn(
       `Integrity check failed: missing ${missingCount}/${sampleSize} words (${(missingRatio * 100).toFixed(1)}%). Missing: ${missingWords.join(", ")}`,
     );
-    return true; // DEBUG: Force return true
+    return false;
   }
 
   return true;
